@@ -1,1 +1,1073 @@
 
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Web Cetak Foto Praktis Dan Mudah Berbagai Ukuran | KampungNET</title>
+    <!-- Favicon -->
+    <link rel="icon" type="image/png" href="img/favicon.png">
+    <!-- Tailwind CSS for styling -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- jsPDF and html2canvas for PDF generation -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Font Awesome for icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.2/css/all.min.css">
+    <!-- Google Fonts: Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    
+    <style>
+        :root {
+            --paper-shadow: 0 4px 12px rgba(0,0,0,0.15);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+        }
+        /* Custom scrollbar for better aesthetics */
+        ::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #2d3748;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #4a5568;
+            border-radius: 10px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #718096;
+        }
+        /* Style for the paper preview */
+        .paper-preview-page {
+            position: relative;
+            overflow: hidden;
+            box-shadow: var(--paper-shadow);
+            transition: all 0.3s ease;
+            margin: auto;
+            background-color: white;
+        }
+        .photo-on-paper {
+            position: absolute;
+            background-size: cover;
+            background-position: center;
+            background-repeat: no-repeat;
+            cursor: grab;
+        }
+        .photo-on-paper:active {
+            cursor: grabbing;
+            z-index: 10;
+        }
+        /* Hide file input default UI */
+        input[type="file"] {
+            display: none;
+        }
+        /* Modal styles for the editor */
+        #editor-modal {
+            background-color: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(5px);
+        }
+        /* Style for selected items in the toolbar */
+        .toolbar-radio:checked + label {
+            background-color: #4f46e5;
+            color: white;
+            border-color: #4f46e5;
+        }
+        /* Custom tooltip for better UX */
+        [data-tooltip]:hover::after {
+            content: attr(data-tooltip);
+            position: absolute;
+            bottom: 100%;
+            left: 50%;
+            transform: translateX(-50%) translateY(-8px);
+            background-color: #1f2937;
+            color: white;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            white-space: nowrap;
+            z-index: 50;
+        }
+        /* Styles for mobile preview fullscreen */
+        .preview-fullscreen {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            z-index: 40;
+            padding: 1rem;
+            background-color: #1a202c; /* bg-gray-900 */
+        }
+        .gallery-item.active {
+            border-color: #4f46e5;
+            box-shadow: 0 0 0 3px rgba(79, 70, 229, 0.5);
+        }
+    </style>
+</head>
+<body class="bg-gray-900 text-white flex flex-col md:flex-row min-h-screen">
+
+    <!-- Toolbar / Control Panel -->
+    <aside id="control-panel" class="w-full md:w-96 bg-gray-800 p-4 overflow-y-auto flex-shrink-0 md:h-screen">
+        <!-- Brand Image -->
+        <img src="img/brand.png" alt="Brand Logo" class="w-full rounded-md mb-6" onerror="this.style.display='none'">
+        
+        <div class="flex items-center justify-between mb-6">
+            <h1 class="text-2xl font-bold text-indigo-400">Cetak Pas Foto</h1>
+            <button id="fullscreen-btn" class="p-2 rounded-full hover:bg-gray-700 transition" data-tooltip="Mode Layar Penuh">
+                <i class="fas fa-expand"></i>
+            </button>
+        </div>
+        
+        <div class="space-y-6">
+            <!-- 1. Upload Section -->
+            <div>
+                <h2 class="font-semibold mb-2 border-b border-gray-600 pb-2">1. Unggah & Pilih Foto</h2>
+                <label for="image-upload" class="w-full cursor-pointer bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded-lg flex items-center justify-center transition">
+                    <i class="fas fa-upload mr-2"></i> Pilih Gambar
+                </label>
+                <input type="file" id="image-upload" multiple accept="image/*">
+                <p class="text-xs text-gray-400 mt-2 text-center">Klik foto di bawah untuk memilihnya sebelum ditambahkan ke daftar cetak.</p>
+                <div id="image-gallery" class="mt-2 grid grid-cols-3 gap-2"></div>
+            </div>
+
+            <!-- 2. Photo Size Section -->
+            <div>
+                <h2 class="font-semibold mb-2 border-b border-gray-600 pb-2">2. Tambah Ukuran ke Daftar Cetak</h2>
+                <div class="grid grid-cols-2 gap-2 text-sm">
+                    <div class="flex">
+                        <input type="radio" id="size-20x30" name="photo_size" value="20x30" class="hidden toolbar-radio" checked>
+                        <label for="size-20x30" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">20x30</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-30x40" name="photo_size" value="30x40" class="hidden toolbar-radio">
+                        <label for="size-30x40" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">30x40</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-35x45" name="photo_size" value="35x45" class="hidden toolbar-radio">
+                        <label for="size-35x45" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">35x45</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-40x60" name="photo_size" value="40x60" class="hidden toolbar-radio">
+                        <label for="size-40x60" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">40x60</label>
+                    </div>
+                     <div class="flex">
+                        <input type="radio" id="size-60x90" name="photo_size" value="60x90" class="hidden toolbar-radio">
+                        <label for="size-60x90" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">2R (60x90)</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-89x127" name="photo_size" value="89x127" class="hidden toolbar-radio">
+                        <label for="size-89x127" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">3R (89x127)</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-102x152" name="photo_size" value="102x152" class="hidden toolbar-radio">
+                        <label for="size-102x152" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">4R (102x152)</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-127x178" name="photo_size" value="127x178" class="hidden toolbar-radio">
+                        <label for="size-127x178" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">5R (127x178)</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-152x203" name="photo_size" value="152x203" class="hidden toolbar-radio">
+                        <label for="size-152x203" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">6R (152x203)</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-203x254" name="photo_size" value="203x254" class="hidden toolbar-radio">
+                        <label for="size-203x254" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">8R (203x254)</label>
+                    </div>
+                    <div class="flex">
+                        <input type="radio" id="size-254x305" name="photo_size" value="254x305" class="hidden toolbar-radio">
+                        <label for="size-254x305" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">10R (254x305)</label>
+                    </div>
+                </div>
+                <div class="mt-2">
+                    <input type="radio" id="size-custom" name="photo_size" value="custom" class="hidden toolbar-radio">
+                    <label for="size-custom" class="w-full text-left p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition flex items-center">
+                        <span class="mr-2">Custom</span>
+                         <div class="flex items-center space-x-1">
+                             <input type="number" id="custom-width" placeholder="W" class="w-12 bg-gray-700 border-gray-500 rounded p-1 text-center text-xs focus:ring-indigo-500 focus:border-indigo-500" min="1">
+                             <span>x</span>
+                             <input type="number" id="custom-height" placeholder="H" class="w-12 bg-gray-700 border-gray-500 rounded p-1 text-center text-xs focus:ring-indigo-500 focus:border-indigo-500" min="1">
+                         </div>
+                    </label>
+                </div>
+                <div class="flex items-center space-x-2 mt-3">
+                    <label for="add-quantity" class="text-sm">Jumlah:</label>
+                    <input type="number" id="add-quantity" value="1" min="1" class="w-16 bg-gray-700 border-gray-500 rounded p-1 text-center focus:ring-indigo-500 focus:border-indigo-500">
+                    <button id="add-to-queue-btn" class="flex-grow bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-3 rounded-lg flex items-center justify-center transition">
+                        <i class="fas fa-plus mr-2"></i> Tambahkan
+                    </button>
+                </div>
+            </div>
+
+            <!-- 3. Print Queue Section -->
+            <div>
+                <h2 class="font-semibold mb-2 border-b border-gray-600 pb-2">3. Daftar Cetak</h2>
+                <div id="print-queue" class="space-y-2 max-h-48 overflow-y-auto">
+                   <!-- Placeholder will be dynamically added by JS -->
+                </div>
+            </div>
+            
+            <!-- 4. Layout Settings -->
+            <div>
+                <h2 class="font-semibold mb-2 border-b border-gray-600 pb-2">4. Pengaturan Tata Letak</h2>
+                <div class="space-y-3">
+                    <div>
+                        <label for="paper-size" class="block text-sm font-medium mb-1">Ukuran Kertas</label>
+                        <select id="paper-size" class="w-full bg-gray-700 border border-gray-600 rounded-md p-2 focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="A4" selected>A4 (210x297 mm)</option>
+                            <option value="A5">A5 (148x210 mm)</option>
+                            <option value="A6">A6 (105x148 mm)</option>
+                            <option value="Letter">Letter (215.9x279.4 mm)</option>
+                            <option value="F4">F4 (215x330 mm)</option>
+                            <option value="A3">A3 (297x420 mm)</option>
+                            <option value="custom">Custom</option>
+                        </select>
+                        <div id="custom-paper-size-inputs" class="hidden grid grid-cols-2 gap-2 mt-2">
+                            <div>
+                                <label for="custom-paper-width" class="block text-xs font-medium">Lebar (mm)</label>
+                                <input type="number" id="custom-paper-width" value="210" min="1" class="w-full bg-gray-700 border-gray-500 rounded p-1 text-center focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                            <div>
+                                <label for="custom-paper-height" class="block text-xs font-medium">Tinggi (mm)</label>
+                                <input type="number" id="custom-paper-height" value="297" min="1" class="w-full bg-gray-700 border-gray-500 rounded p-1 text-center focus:ring-indigo-500 focus:border-indigo-500">
+                            </div>
+                        </div>
+                    </div>
+                     <div id="orientation-container">
+                        <label class="block text-sm font-medium mb-1">Orientasi Kertas</label>
+                        <div class="grid grid-cols-2 gap-2 text-sm">
+                            <div class="flex">
+                                <input type="radio" id="orientation-potret" name="paper_orientation" value="potret" class="hidden toolbar-radio" checked>
+                                <label for="orientation-potret" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">Potret</label>
+                            </div>
+                            <div class="flex">
+                                <input type="radio" id="orientation-landscape" name="paper_orientation" value="landscape" class="hidden toolbar-radio">
+                                <label for="orientation-landscape" class="w-full text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">Lanskap</label>
+                            </div>
+                        </div>
+                    </div>
+                     <div>
+                        <label class="block text-sm font-medium mb-1">Jarak Antar Foto</label>
+                        <div class="grid grid-cols-4 gap-2 text-sm">
+                            <input type="radio" id="spacing-0" name="spacing" value="0" class="hidden toolbar-radio">
+                            <label for="spacing-0" class="text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">0 mm</label>
+                            <input type="radio" id="spacing-1" name="spacing" value="1" class="hidden toolbar-radio" checked>
+                            <label for="spacing-1" class="text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">1 mm</label>
+                            <input type="radio" id="spacing-2" name="spacing" value="2" class="hidden toolbar-radio">
+                            <label for="spacing-2" class="text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">2 mm</label>
+                            <input type="radio" id="spacing-3" name="spacing" value="3" class="hidden toolbar-radio">
+                            <label for="spacing-3" class="text-center p-2 border border-gray-600 rounded-md cursor-pointer hover:bg-gray-700 transition">3 mm</label>
+                        </div>
+                    </div>
+                    <div>
+                         <label class="block text-sm font-medium mb-1">Margin Kertas (mm)</label>
+                         <div class="grid grid-cols-2 gap-2 text-sm">
+                              <div class="flex items-center">
+                                  <span class="w-16">Atas</span>
+                                  <input type="number" id="margin-top" value="5" min="0" class="w-full bg-gray-700 border-gray-500 rounded p-1 text-center focus:ring-indigo-500 focus:border-indigo-500">
+                              </div>
+                              <div class="flex items-center">
+                                  <span class="w-16">Kiri</span>
+                                  <input type="number" id="margin-left" value="5" min="0" class="w-full bg-gray-700 border-gray-500 rounded p-1 text-center focus:ring-indigo-500 focus:border-indigo-500">
+                              </div>
+                         </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- 5. Print Options -->
+            <div>
+                <h2 class="font-semibold mb-2 border-b border-gray-600 pb-2">5. Opsi Tambahan</h2>
+                 <div class="flex items-center justify-between bg-gray-700 p-2 rounded-md">
+                    <label for="outline" class="text-sm font-medium">Garis Bantu Potong</label>
+                    <label for="outline" class="relative inline-flex items-center cursor-pointer">
+                        <input type="checkbox" id="outline" class="sr-only peer" checked>
+                        <div class="w-11 h-6 bg-gray-600 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-gray-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-indigo-600"></div>
+                    </label>
+                </div>
+            </div>
+            
+            <!-- 6. Generate Button -->
+            <div class="pt-4 border-t border-gray-700 space-y-2">
+                <button id="generate-pdf-btn" class="w-full bg-green-600 hover:bg-green-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition disabled:opacity-50" disabled><i class="fas fa-file-pdf mr-2"></i> Buat & Unduh PDF</button>
+                <button id="print-btn" class="w-full bg-sky-600 hover:bg-sky-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition disabled:opacity-50" disabled><i class="fas fa-print mr-2"></i> Cetak Langsung</button>
+                <button id="share-btn" class="w-full bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-lg flex items-center justify-center transition disabled:opacity-50" disabled><i class="fas fa-share-alt mr-2"></i> Bagikan Hasil</button>
+                <a href="donasi.html" target="_blank" class="w-full block bg-orange-600 hover:bg-orange-700 text-white font-bold py-3 px-4 rounded-lg text-center transition"><i class="fas fa-heart mr-2"></i> Donasi</a>
+            </div>
+        </div>
+    </aside>
+
+    <!-- Preview Area -->
+    <main id="preview-area" class="relative flex-grow bg-gray-900 p-4 md:p-8 flex items-center justify-center overflow-auto min-h-[50vh] md:min-h-0">
+        <div id="auto-arrange-container" class="hidden absolute bottom-4 left-1/2 -translate-x-1/2 bg-gray-800/80 p-2 rounded-lg shadow-lg z-20">
+            <label class="flex items-center space-x-2 text-sm cursor-pointer">
+                <input type="checkbox" id="auto-arrange-checkbox" class="form-checkbox h-4 w-4 text-indigo-600 bg-gray-700 border-gray-600 rounded focus:ring-indigo-500">
+                <span>Susun Otomatis</span>
+            </label>
+        </div>
+        <!-- FIXED: Re-added fullscreen button and loading spinner -->
+        <button id="preview-fullscreen-btn" class="md:hidden absolute top-4 right-4 z-20 p-2 rounded-full bg-gray-800/50 hover:bg-gray-700 transition" data-tooltip="Layar Penuh">
+            <i class="fas fa-expand"></i>
+        </button>
+        <div id="loading-spinner" class="absolute inset-0 items-center justify-center bg-gray-900 bg-opacity-70 z-20 hidden">
+            <div class="flex flex-col items-center">
+                <svg class="animate-spin h-10 w-10 text-indigo-400" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                    <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                </svg>
+                <p class="mt-4 text-white">Memproses gambar...</p>
+            </div>
+        </div>
+        <div id="preview-pages" class="flex flex-col items-center gap-4">
+            <!-- Paper preview will be generated here by JS -->
+        </div>
+    </main>
+    
+    <!-- Editor Modal -->
+    <div id="editor-modal" class="fixed inset-0 z-50 hidden items-center justify-center p-4">
+        <div class="bg-gray-800 rounded-lg shadow-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+            <div class="p-6 pb-4 flex-shrink-0">
+                <h2 class="text-xl font-bold">Edit Latar Belakang (Manual)</h2>
+            </div>
+            <div class="flex-grow overflow-y-auto px-6 space-y-4">
+                <div class="bg-black flex justify-center items-center rounded relative">
+                     <canvas id="editor-canvas" class="max-w-full max-h-[50vh] cursor-pointer"></canvas>
+                </div>
+                <div>
+                    <h3 class="font-semibold mb-2">Alat Pengganti Warna</h3>
+                    <div class="flex flex-col sm:flex-row items-stretch sm:items-center space-y-3 sm:space-y-0 sm:space-x-4">
+                         <div class="flex-1">
+                             <label for="new-bg-color" class="text-sm">Pilih Warna Baru</label>
+                             <input type="color" id="new-bg-color" value="#dc2626" class="w-full h-10 p-1 bg-gray-700 border border-gray-600 cursor-pointer rounded-lg">
+                         </div>
+                         <div class="flex-1">
+                            <div class="flex justify-between items-center mb-1">
+                                 <label for="color-tolerance" class="text-sm">Toleransi Warna</label>
+                                 <div class="flex items-center space-x-2">
+                                     <button id="undo-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-bold p-2 h-7 w-7 rounded-full flex items-center justify-center transition disabled:opacity-50" disabled data-tooltip="Urungkan">
+                                        <i class="fas fa-undo text-xs"></i>
+                                    </button>
+                                    <button id="redo-btn" class="bg-gray-600 hover:bg-gray-500 text-white font-bold p-2 h-7 w-7 rounded-full flex items-center justify-center transition disabled:opacity-50" disabled data-tooltip="Ulangi">
+                                        <i class="fas fa-redo text-xs"></i>
+                                    </button>
+                                 </div>
+                            </div>
+                            <div class="flex items-center space-x-2">
+                                <input type="range" id="color-tolerance" min="0" max="100" value="20" class="w-full h-2 bg-gray-600 rounded-lg appearance-none cursor-pointer">
+                                <span id="tolerance-value" class="text-sm font-mono w-12 text-center">20%</span>
+                            </div>
+                         </div>
+                    </div>
+                    <p class="text-sm text-indigo-300 mt-4 font-semibold text-center bg-gray-900 p-3 rounded-lg">
+                        <b>Cara Penggunaan:</b> Klik pada area latar belakang untuk mengganti warnanya. Sesuaikan toleransi untuk hasil terbaik.
+                    </p>
+                </div>
+            </div>
+            <div class="flex justify-end space-x-3 p-6 pt-4 border-t border-gray-700 flex-shrink-0">
+                <button id="cancel-edit-btn" class="px-4 py-2 bg-gray-600 hover:bg-gray-500 rounded-lg transition">Batal</button>
+                <button id="save-edit-btn" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 rounded-lg transition">Simpan Perubahan</button>
+            </div>
+        </div>
+    </div>
+
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            // DOM Elements
+            const imageUpload = document.getElementById('image-upload');
+            const imageGallery = document.getElementById('image-gallery');
+            const previewPagesContainer = document.getElementById('preview-pages');
+            const generatePdfBtn = document.getElementById('generate-pdf-btn');
+            const printBtn = document.getElementById('print-btn');
+            const shareBtn = document.getElementById('share-btn');
+            const fullscreenBtn = document.getElementById('fullscreen-btn');
+            const previewArea = document.getElementById('preview-area');
+            const loadingSpinner = document.getElementById('loading-spinner');
+            const controlPanel = document.getElementById('control-panel');
+            const previewFullscreenBtn = document.getElementById('preview-fullscreen-btn');
+            const autoArrangeContainer = document.getElementById('auto-arrange-container');
+            const autoArrangeCheckbox = document.getElementById('auto-arrange-checkbox');
+            
+            // Editor Modal Elements
+            const editorModal = document.getElementById('editor-modal');
+            const editorCanvas = document.getElementById('editor-canvas');
+            const newBgColorInput = document.getElementById('new-bg-color');
+            const colorToleranceInput = document.getElementById('color-tolerance');
+            const toleranceValueSpan = document.getElementById('tolerance-value');
+            const cancelEditBtn = document.getElementById('cancel-edit-btn');
+            const saveEditBtn = document.getElementById('save-edit-btn');
+            const undoBtn = document.getElementById('undo-btn');
+            const redoBtn = document.getElementById('redo-btn');
+            let ctx = editorCanvas.getContext('2d', { willReadFrequently: true });
+
+            // App State
+            let uploadedImages = [];
+            let activeImageId = null;
+            let currentEditingImageId = null;
+            let originalImageForEditing = null;
+            let printQueue = [];
+            let pagesLayout = [];
+            let hasBeenDragged = false;
+
+            // Undo/Redo State
+            let undoStack = [];
+            let redoStack = [];
+            let lastClickPoint = null;
+            
+            const PAPER_SIZES = {
+                A4: { w: 210, h: 297 }, A5: { w: 148, h: 210 }, A6: { w: 105, h: 148 },
+                Letter: { w: 215.9, h: 279.4 }, F4: { w: 215, h: 330 }, A3: { w: 297, h: 420 },
+            };
+            const DPI = 300;
+            const MM_TO_IN = 1 / 25.4;
+            const mmToPx = mm => mm * MM_TO_IN * DPI;
+
+            // --- Undo/Redo Functions ---
+            const updateUndoRedoButtons = () => {
+                undoBtn.disabled = undoStack.length <= 1;
+                redoBtn.disabled = redoStack.length === 0;
+            };
+
+            const pushStateToUndoStack = () => {
+                redoStack = []; 
+                const imageData = ctx.getImageData(0, 0, editorCanvas.width, editorCanvas.height);
+                
+                // Prevent pushing identical states
+                if(undoStack.length > 0) {
+                    const lastData = undoStack[undoStack.length - 1].data;
+                    if(new Uint32Array(lastData.buffer).toString() === new Uint32Array(imageData.data.buffer).toString()){
+                       return;
+                    }
+                }
+                
+                undoStack.push(imageData);
+                updateUndoRedoButtons();
+            };
+
+            const undo = () => {
+                if (undoStack.length <= 1) return;
+                lastClickPoint = null; // Reset last click on undo
+                const lastState = undoStack.pop();
+                redoStack.push(lastState);
+                const prevState = undoStack[undoStack.length - 1];
+                ctx.putImageData(prevState, 0, 0);
+                updateUndoRedoButtons();
+            };
+
+            const redo = () => {
+                if (redoStack.length === 0) return;
+                lastClickPoint = null; // Reset last click on redo
+                const nextState = redoStack.pop();
+                undoStack.push(nextState);
+                ctx.putImageData(nextState, 0, 0);
+                updateUndoRedoButtons();
+            };
+
+            // --- Flood Fill Function ---
+            const recalculateFloodFill = () => {
+                if (!lastClickPoint || undoStack.length === 0) return;
+
+                const baseState = undoStack[undoStack.length - 1];
+                const imageData = new ImageData(
+                    new Uint8ClampedArray(baseState.data),
+                    baseState.width,
+                    baseState.height
+                );
+
+                const { x, y } = lastClickPoint;
+                const data = imageData.data;
+                const targetIndex = (y * imageData.width + x) * 4;
+                const targetColor = [data[targetIndex], data[targetIndex + 1], data[targetIndex + 2]];
+
+                const newColorHex = newBgColorInput.value;
+                const newColor = [parseInt(newColorHex.substr(1, 2), 16), parseInt(newColorHex.substr(3, 2), 16), parseInt(newColorHex.substr(5, 2), 16)];
+                const tolerance = parseInt(colorToleranceInput.value);
+
+                if (colorDifference(targetColor, newColor) < 5) {
+                    ctx.putImageData(imageData, 0, 0);
+                    return;
+                }
+
+                const queue = [[x, y]];
+                const visited = new Set(`${x},${y}`);
+
+                while (queue.length > 0) {
+                    const [curX, curY] = queue.shift();
+                    const currentIndex = (curY * imageData.width + curX) * 4;
+                    if (colorDifference([data[currentIndex], data[currentIndex + 1], data[currentIndex + 2]], targetColor) <= tolerance) {
+                        data[currentIndex] = newColor[0];
+                        data[currentIndex + 1] = newColor[1];
+                        data[currentIndex + 2] = newColor[2];
+
+                        [[curX + 1, curY], [curX - 1, curY], [curX, curY + 1], [curX, curY - 1]].forEach(([nextX, nextY]) => {
+                            const key = `${nextX},${nextY}`;
+                            if (nextX >= 0 && nextX < imageData.width && nextY >= 0 && nextY < imageData.height && !visited.has(key)) {
+                                visited.add(key);
+                                queue.push([nextX, nextY]);
+                            }
+                        });
+                    }
+                }
+                ctx.putImageData(imageData, 0, 0);
+            };
+
+            const handleCanvasClick = (clickEvent) => {
+                const rect = editorCanvas.getBoundingClientRect();
+                lastClickPoint = {
+                    x: Math.floor((clickEvent.clientX - rect.left) * (editorCanvas.width / rect.width)),
+                    y: Math.floor((clickEvent.clientY - rect.top) * (editorCanvas.height / rect.height))
+                };
+                recalculateFloodFill();
+                pushStateToUndoStack();
+            };
+            
+            const colorDifference = (c1, c2) => Math.sqrt(Math.pow(c1[0] - c2[0], 2) + Math.pow(c1[1] - c2[1], 2) + Math.pow(c1[2] - c2[2], 2));
+
+
+            // --- Core Functions ---
+            const getSettings = () => {
+                const settings = {};
+                
+                const paperSelect = document.getElementById('paper-size');
+                if (paperSelect.value === 'custom') {
+                    settings.paperW = parseFloat(document.getElementById('custom-paper-width').value) || 210;
+                    settings.paperH = parseFloat(document.getElementById('custom-paper-height').value) || 297;
+                } else {
+                    const orientation = document.querySelector('input[name="paper_orientation"]:checked').value;
+                    const paperDim = PAPER_SIZES[paperSelect.value];
+                    settings.paperW = (orientation === 'landscape') ? Math.max(paperDim.w, paperDim.h) : Math.min(paperDim.w, paperDim.h);
+                    settings.paperH = (orientation === 'landscape') ? Math.min(paperDim.w, paperDim.h) : Math.max(paperDim.w, paperDim.h);
+                }
+                
+                settings.marginTop = parseFloat(document.getElementById('margin-top').value) || 0;
+                settings.marginBottom = 0;
+                settings.marginLeft = parseFloat(document.getElementById('margin-left').value) || 0;
+                settings.marginRight = 0;
+                const checkedSpacing = document.querySelector('input[name="spacing"]:checked');
+                settings.spacing = checkedSpacing ? parseFloat(checkedSpacing.value) : 0;
+                settings.outline = document.getElementById('outline').checked;
+                return settings;
+            };
+
+            const calculateLayoutAndRender = () => {
+                const settings = getSettings();
+                
+                if (printQueue.length === 0) {
+                     pagesLayout = [];
+                     renderPreviewPages(settings);
+                     [generatePdfBtn, printBtn, shareBtn].forEach(btn => btn.disabled = true);
+                     return;
+                }
+
+                const photosToPlace = printQueue.flatMap(item => {
+                    const img = uploadedImages.find(i => i.id === item.imageId);
+                    const src = img.editedSrc || img.originalSrc;
+                    return Array(item.count).fill({ src, width: item.photoW, height: item.photoH, id: item.id });
+                });
+
+                pagesLayout = runPackingAlgorithm(photosToPlace, settings);
+                renderPreviewPages(settings);
+                
+                const hasItems = printQueue.length > 0;
+                [generatePdfBtn, printBtn, shareBtn].forEach(btn => btn.disabled = !hasItems);
+            };
+
+            const runPackingAlgorithm = (photos, settings) => {
+                const pages = [];
+                if (photos.length === 0) return pages;
+
+                let remainingPhotos = [...photos];
+                
+                while (remainingPhotos.length > 0) {
+                    let currentPagePhotos = [];
+                    let xPos = settings.marginLeft;
+                    let yPos = settings.marginTop;
+                    let rowHeight = 0;
+
+                    let photosLeft = [];
+                    
+                    for (const photo of remainingPhotos) {
+                         if (xPos + photo.width <= settings.paperW && yPos + photo.height <= settings.paperH) {
+                             currentPagePhotos.push({...photo, x: xPos, y: yPos});
+                             xPos += photo.width + settings.spacing;
+                             rowHeight = Math.max(rowHeight, photo.height);
+                        } else if (yPos + rowHeight + settings.spacing + photo.height <= settings.paperH) {
+                            yPos += rowHeight + settings.spacing;
+                            xPos = settings.marginLeft;
+                            rowHeight = 0;
+                             if (xPos + photo.width <= settings.paperW && yPos + photo.height <= settings.paperH) {
+                                currentPagePhotos.push({...photo, x: xPos, y: yPos});
+                                xPos += photo.width + settings.spacing;
+                                rowHeight = Math.max(rowHeight, photo.height);
+                            } else {
+                                photosLeft.push(photo);
+                            }
+                        } else {
+                           photosLeft.push(photo);
+                        }
+                    }
+                    
+                    if (currentPagePhotos.length > 0) {
+                       pages.push(currentPagePhotos);
+                    }
+                    if (photosLeft.length === remainingPhotos.length) {
+                         console.error("Foto terlalu besar untuk kertas, atau tidak ada ruang tersisa.", photosLeft[0]);
+                         break;
+                    }
+                    remainingPhotos = photosLeft;
+                }
+                return pages;
+            };
+
+            const renderPreviewPages = (settings) => {
+                previewPagesContainer.innerHTML = '';
+                const previewAreaRect = previewArea.getBoundingClientRect();
+                const scale = Math.min((previewAreaRect.width - 32) / settings.paperW, (previewAreaRect.height - 32) / settings.paperH);
+                
+                if (pagesLayout.length === 0) {
+                    const paperPreviewPage = document.createElement('div');
+                    paperPreviewPage.className = 'paper-preview-page';
+                    paperPreviewPage.style.width = `${settings.paperW * scale}px`;
+                    paperPreviewPage.style.height = `${settings.paperH * scale}px`;
+                    const placeholder = document.createElement('p');
+                    placeholder.className = 'text-gray-400 text-center absolute inset-0 flex items-center justify-center text-sm p-4';
+                    placeholder.textContent = 'Pratinjau Cetak Akan Tampil di Sini';
+                    paperPreviewPage.appendChild(placeholder);
+                    previewPagesContainer.appendChild(paperPreviewPage);
+                    return;
+                }
+
+                pagesLayout.forEach((pagePhotos, pageIndex) => {
+                    const paperPreviewPage = document.createElement('div');
+                    paperPreviewPage.className = 'paper-preview-page';
+                    paperPreviewPage.style.width = `${settings.paperW * scale}px`;
+                    paperPreviewPage.style.height = `${settings.paperH * scale}px`;
+
+                    pagePhotos.forEach((photo, photoIndex) => {
+                        const photoEl = document.createElement('div');
+                        photoEl.className = 'photo-on-paper';
+                        photoEl.style.width = `${photo.width * scale}px`;
+                        photoEl.style.height = `${photo.height * scale}px`;
+                        photoEl.style.left = `${photo.x * scale}px`;
+                        photoEl.style.top = `${photo.y * scale}px`;
+                        photoEl.style.backgroundImage = `url(${photo.src})`;
+                        if (settings.outline) {
+                            photoEl.style.outline = `${Math.max(0.5, scale)}px solid #ccc`;
+                        }
+                        makeElementDraggable(photoEl, pageIndex, photoIndex, scale);
+                        paperPreviewPage.appendChild(photoEl);
+                    });
+                    previewPagesContainer.appendChild(paperPreviewPage);
+                });
+            };
+            
+            function makeElementDraggable(element, pageIndex, photoIndex, scale) {
+                let initialX, initialY, initialLeft, initialTop;
+
+                function onDragStart(e) {
+                    if (autoArrangeCheckbox.checked) return;
+                    e.preventDefault();
+                    
+                    initialX = e.clientX || e.touches[0].clientX;
+                    initialY = e.clientY || e.touches[0].clientY;
+                    
+                    const photoData = pagesLayout[pageIndex][photoIndex];
+                    initialLeft = photoData.x * scale;
+                    initialTop = photoData.y * scale;
+
+                    document.addEventListener('mousemove', onDrag);
+                    document.addEventListener('mouseup', onDrop);
+                    document.addEventListener('touchmove', onDrag);
+                    document.addEventListener('touchend', onDrop);
+                }
+
+                function onDrag(e) {
+                    e.preventDefault();
+                    const currentX = e.clientX || e.touches[0].clientX;
+                    const currentY = e.clientY || e.touches[0].clientY;
+                    
+                    let dx = currentX - initialX;
+                    let dy = currentY - initialY;
+                    
+                    element.style.left = `${initialLeft + dx}px`;
+                    element.style.top = `${initialTop + dy}px`;
+                }
+
+                function onDrop(e) {
+                    const finalX = e.clientX || e.changedTouches[0].clientX;
+                    const finalY = e.clientY || e.changedTouches[0].clientY;
+
+                    let dx = finalX - initialX;
+                    let dy = finalY - initialY;
+                    
+                    const newLeft = initialLeft + dx;
+                    const newTop = initialTop + dy;
+                    
+                    pagesLayout[pageIndex][photoIndex].x = newLeft / scale;
+                    pagesLayout[pageIndex][photoIndex].y = newTop / scale;
+                    
+                    if (!hasBeenDragged) {
+                        hasBeenDragged = true;
+                        autoArrangeContainer.classList.remove('hidden');
+                        autoArrangeCheckbox.checked = false;
+                    }
+                    
+                    document.removeEventListener('mousemove', onDrag);
+                    document.removeEventListener('mouseup', onDrop);
+                    document.removeEventListener('touchmove', onDrag);
+                    document.removeEventListener('touchend', onDrop);
+                }
+
+                element.addEventListener('mousedown', onDragStart);
+                element.addEventListener('touchstart', onDragStart);
+            }
+
+            const renderGallery = () => {
+                imageGallery.innerHTML = '';
+                uploadedImages.forEach(img => {
+                    const thumbContainer = document.createElement('div');
+                    thumbContainer.className = `gallery-item relative border-2 rounded-lg overflow-hidden cursor-pointer ${img.id === activeImageId ? 'active' : 'border-gray-700'}`;
+                    thumbContainer.onclick = () => {
+                        activeImageId = img.id;
+                        renderGallery();
+                    };
+
+                    const thumbImg = document.createElement('img');
+                    thumbImg.src = img.editedSrc || img.originalSrc;
+                    thumbImg.className = 'w-full h-24 object-cover';
+                    
+                    const actionButtonsContainer = document.createElement('div');
+                    actionButtonsContainer.className = 'absolute top-1 right-1 bg-black/70 p-1 flex items-center space-x-1 rounded-bl-lg z-10';
+                    
+                    const editBtn = document.createElement('button');
+                    editBtn.innerHTML = '<i class="fas fa-edit"></i>';
+                    editBtn.className = 'text-white text-xs p-1 hover:text-indigo-400';
+                    editBtn.onclick = (e) => { e.stopPropagation(); openEditor(img.id); };
+
+                    const removeBtn = document.createElement('button');
+                    removeBtn.innerHTML = '<i class="fas fa-trash"></i>';
+                    removeBtn.className = 'text-white text-xs p-1 hover:text-red-500';
+                    removeBtn.onclick = (e) => { 
+                        e.stopPropagation();
+                        uploadedImages = uploadedImages.filter(i => i.id !== img.id);
+                        if (activeImageId === img.id) activeImageId = null;
+                        renderGallery();
+                        calculateLayoutAndRender();
+                    };
+                    actionButtonsContainer.append(editBtn, removeBtn);
+                    
+                    thumbContainer.append(thumbImg, actionButtonsContainer);
+                    imageGallery.appendChild(thumbContainer);
+                });
+                 if (uploadedImages.length > 0 && !activeImageId) {
+                    activeImageId = uploadedImages[0].id;
+                    renderGallery();
+                }
+            };
+
+            const openEditor = (id) => {
+                const image = uploadedImages.find(img => img.id === id);
+                if (!image) return;
+                currentEditingImageId = id;
+
+                originalImageForEditing = new Image();
+                originalImageForEditing.crossOrigin = "Anonymous";
+                originalImageForEditing.onload = () => {
+                    editorCanvas.width = originalImageForEditing.width;
+                    editorCanvas.height = originalImageForEditing.height;
+                    ctx.drawImage(originalImageForEditing, 0, 0);
+                    undoStack = [];
+                    redoStack = [];
+                    lastClickPoint = null;
+                    pushStateToUndoStack();
+                    editorModal.classList.remove('hidden');
+                    editorModal.classList.add('flex');
+                };
+                originalImageForEditing.src = image.originalSrc;
+            };
+
+            const closeEditor = () => {
+                editorModal.classList.add('hidden');
+                editorModal.classList.remove('flex');
+                currentEditingImageId = null;
+                originalImageForEditing = null;
+                undoStack = [];
+                redoStack = [];
+                lastClickPoint = null;
+            };
+
+            const generateHighResCanvases = async () => {
+                const settings = getSettings();
+                const canvases = [];
+                
+                for (const pagePhotos of pagesLayout) {
+                    const printContainer = document.createElement('div');
+                    printContainer.style.position = 'absolute';
+                    printContainer.style.left = '-9999px';
+                    printContainer.style.width = `${mmToPx(settings.paperW)}px`;
+                    printContainer.style.height = `${mmToPx(settings.paperH)}px`;
+                    printContainer.style.backgroundColor = 'white';
+                    document.body.appendChild(printContainer);
+                    
+                    for (const photo of pagePhotos) {
+                        const imgEl = document.createElement('img');
+                        imgEl.crossOrigin = "Anonymous";
+                        await new Promise(resolve => {
+                            imgEl.onload = resolve;
+                            imgEl.src = photo.src;
+                        });
+                        imgEl.style.position = 'absolute';
+                        imgEl.style.width = `${mmToPx(photo.width)}px`;
+                        imgEl.style.height = `${mmToPx(photo.height)}px`;
+                        imgEl.style.left = `${mmToPx(photo.x)}px`;
+                        imgEl.style.top = `${mmToPx(photo.y)}px`;
+                        if (settings.outline) imgEl.style.outline = `1px solid #ccc`;
+                        printContainer.appendChild(imgEl);
+                    }
+
+                    const canvas = await html2canvas(printContainer, { scale: 1, useCORS: true, logging: false });
+                    canvases.push(canvas);
+                    document.body.removeChild(printContainer);
+                }
+                return canvases;
+            };
+            
+            // --- Event Listeners ---
+            const paperSizeSelect = document.getElementById('paper-size');
+            const customPaperSizeInputs = document.getElementById('custom-paper-size-inputs');
+            const orientationContainer = document.getElementById('orientation-container');
+
+            paperSizeSelect.addEventListener('change', () => {
+                if (paperSizeSelect.value === 'custom') {
+                    customPaperSizeInputs.classList.remove('hidden');
+                    orientationContainer.classList.add('hidden');
+                } else {
+                    customPaperSizeInputs.classList.add('hidden');
+                    orientationContainer.classList.remove('hidden');
+                }
+                calculateLayoutAndRender();
+            });
+            
+            autoArrangeCheckbox.addEventListener('change', () => {
+                if (autoArrangeCheckbox.checked) {
+                    calculateLayoutAndRender();
+                }
+            });
+
+            generatePdfBtn.addEventListener('click', async () => {
+                generatePdfBtn.disabled = true;
+                generatePdfBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Memproses...`;
+                const canvases = await generateHighResCanvases();
+                const settings = getSettings();
+                const { jsPDF } = window.jspdf;
+                const orientation = settings.paperW > settings.paperH ? 'l' : 'p';
+                const pdf = new jsPDF(orientation, 'mm', [settings.paperW, settings.paperH]);
+                canvases.forEach((canvas, index) => {
+                    if (index > 0) pdf.addPage([settings.paperW, settings.paperH], orientation);
+                    pdf.addImage(canvas.toDataURL('image/png'), 'PNG', 0, 0, settings.paperW, settings.paperH);
+                });
+                pdf.save(`cetak-foto-kampungnet.pdf`);
+                generatePdfBtn.disabled = false;
+                generatePdfBtn.innerHTML = `<i class="fas fa-file-pdf mr-2"></i> Buat & Unduh PDF`;
+            });
+
+            printBtn.addEventListener('click', async () => {
+                printBtn.disabled = true;
+                printBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Menyiapkan...`;
+                const canvases = await generateHighResCanvases();
+                const iframe = document.createElement('iframe');
+                iframe.style.visibility = 'hidden';
+                iframe.style.position = 'fixed';
+                document.body.appendChild(iframe);
+                const doc = iframe.contentDocument;
+                doc.write(`<html><head><title>Cetak</title><style>@page{size:auto;margin:0}body{margin:0}</style></head><body>`);
+                canvases.forEach(canvas => doc.write(`<img src="${canvas.toDataURL('image/png')}" style="width:100%;page-break-after:always;">`));
+                doc.write('</body></html>');
+                doc.close();
+                iframe.contentWindow.focus();
+                iframe.contentWindow.print();
+                setTimeout(() => document.body.removeChild(iframe), 1000);
+                printBtn.disabled = false;
+                printBtn.innerHTML = `<i class="fas fa-print mr-2"></i> Cetak Langsung`;
+            });
+
+            shareBtn.addEventListener('click', async () => {
+                if (!navigator.share) { alert("Fitur bagikan tidak didukung di browser ini."); return; }
+                shareBtn.disabled = true;
+                shareBtn.innerHTML = `<i class="fas fa-spinner fa-spin mr-2"></i> Memproses...`;
+                const canvases = await generateHighResCanvases();
+                if (canvases.length > 0) {
+                    canvases[0].toBlob(async (blob) => {
+                        try {
+                            await navigator.share({
+                                files: [new File([blob], 'hasil-cetak-foto.png', { type: 'image/png' })],
+                                title: 'Hasil Cetak Pas Foto',
+                            });
+                        } catch (err) { console.error('Gagal membagikan:', err); }
+                    }, 'image/png');
+                }
+                shareBtn.disabled = false;
+                shareBtn.innerHTML = `<i class="fas fa-share-alt mr-2"></i> Bagikan Hasil`;
+            });
+
+            imageUpload.addEventListener('change', (e) => {
+                const files = Array.from(e.target.files);
+                if (files.length === 0) return;
+                loadingSpinner.style.display = 'flex';
+                
+                Promise.all(files.map(file => new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = (event) => resolve({ id: Date.now() + Math.random(), originalSrc: event.target.result, editedSrc: null });
+                    reader.readAsDataURL(file);
+                }))).then(newImages => {
+                    uploadedImages.push(...newImages);
+                    renderGallery();
+                    calculateLayoutAndRender();
+                    loadingSpinner.style.display = 'none';
+                });
+                e.target.value = '';
+            });
+
+            cancelEditBtn.addEventListener('click', closeEditor);
+            saveEditBtn.addEventListener('click', () => {
+                const image = uploadedImages.find(img => img.id === currentEditingImageId);
+                if (image) image.editedSrc = editorCanvas.toDataURL('image/png');
+                closeEditor();
+                renderGallery();
+                calculateLayoutAndRender();
+            });
+
+            editorCanvas.addEventListener('click', handleCanvasClick);
+            undoBtn.addEventListener('click', undo);
+            redoBtn.addEventListener('click', redo);
+            
+            colorToleranceInput.addEventListener('input', () => {
+                toleranceValueSpan.textContent = `${colorToleranceInput.value}%`;
+                recalculateFloodFill();
+            });
+            colorToleranceInput.addEventListener('change', () => {
+                if(lastClickPoint){
+                    pushStateToUndoStack();
+                }
+            });
+            
+            document.querySelectorAll('#control-panel input, #control-panel select').forEach(control => control.addEventListener('input', calculateLayoutAndRender));
+            window.addEventListener('resize', () => renderPreviewPages(getSettings()));
+            
+            if (previewFullscreenBtn) {
+                previewFullscreenBtn.addEventListener('click', () => {
+                    previewArea.classList.toggle('preview-fullscreen');
+                    controlPanel.classList.toggle('hidden');
+                    setTimeout(() => renderPreviewPages(getSettings()), 50);
+                });
+            }
+            if(fullscreenBtn) {
+                fullscreenBtn.addEventListener('click', () => {
+                    if (!document.fullscreenElement) {
+                        document.documentElement.requestFullscreen();
+                    } else {
+                        document.exitFullscreen();
+                    }
+                });
+            }
+
+            const addToQueueBtn = document.getElementById('add-to-queue-btn');
+            addToQueueBtn.addEventListener('click', () => {
+                if (!activeImageId) {
+                    alert('Silakan pilih foto terlebih dahulu dari galeri.');
+                    return;
+                }
+                const checkedSize = document.querySelector('input[name="photo_size"]:checked');
+                let photoW, photoH;
+                if (checkedSize.value === 'custom') {
+                    photoW = parseFloat(document.getElementById('custom-width').value);
+                    photoH = parseFloat(document.getElementById('custom-height').value);
+                } else {
+                    [photoW, photoH] = checkedSize.value.split('x').map(Number);
+                }
+                
+                if (!photoW || !photoH || photoW <= 0 || photoH <= 0) {
+                    alert('Ukuran foto custom tidak valid.');
+                    return;
+                }
+
+                const quantity = parseInt(document.getElementById('add-quantity').value);
+                if (quantity <= 0) {
+                    alert('Jumlah harus lebih dari 0.');
+                    return;
+                }
+
+                printQueue.push({
+                    id: Date.now() + Math.random(),
+                    imageId: activeImageId,
+                    photoW,
+                    photoH,
+                    count: quantity
+                });
+                renderPrintQueue();
+                calculateLayoutAndRender();
+            });
+
+            const renderPrintQueue = () => {
+                const queueContainer = document.getElementById('print-queue');
+                queueContainer.innerHTML = ''; 
+
+                if (printQueue.length === 0) {
+                    const placeholder = document.createElement('p');
+                    placeholder.id = 'print-queue-placeholder';
+                    placeholder.className = 'text-sm text-gray-400 text-center py-4';
+                    placeholder.textContent = 'Daftar cetak masih kosong.';
+                    queueContainer.appendChild(placeholder);
+                } else {
+                    printQueue.forEach(item => {
+                        const img = uploadedImages.find(i => i.id === item.imageId);
+                        if (!img) return;
+                        const itemEl = document.createElement('div');
+                        itemEl.className = 'bg-gray-700 p-2 rounded-lg flex items-center space-x-2 text-sm';
+                        itemEl.innerHTML = `
+                            <img src="${img.editedSrc || img.originalSrc}" class="w-8 h-10 object-cover rounded">
+                            <div class="flex-grow">
+                                <p class="font-semibold">${item.photoW}x${item.photoH} mm</p>
+                            </div>
+                            <input type="number" value="${item.count}" min="1" class="queue-item-count w-12 bg-gray-800 border-gray-600 rounded p-1 text-center" data-id="${item.id}">
+                            <button class="remove-queue-item text-red-500 hover:text-red-400 p-1" data-id="${item.id}"><i class="fas fa-trash"></i></button>
+                        `;
+                        queueContainer.appendChild(itemEl);
+                    });
+
+                    queueContainer.querySelectorAll('.remove-queue-item').forEach(btn => {
+                        btn.onclick = () => {
+                            const itemId = parseFloat(btn.dataset.id);
+                            printQueue = printQueue.filter(item => item.id !== itemId);
+                            renderPrintQueue();
+                            calculateLayoutAndRender();
+                        };
+                    });
+                     queueContainer.querySelectorAll('.queue-item-count').forEach(input => {
+                        input.onchange = () => {
+                            const itemId = parseFloat(input.dataset.id);
+                            const newCount = parseInt(input.value);
+                            const item = printQueue.find(item => item.id === itemId);
+                            if (item && newCount > 0) {
+                                item.count = newCount;
+                                calculateLayoutAndRender();
+                            } else { 
+                                renderPrintQueue();
+                            }
+                        };
+                    });
+                }
+            };
+            
+            // Initial call
+            renderPrintQueue();
+            calculateLayoutAndRender();
+        });
+    </script>
+</body>
+</html>
+
