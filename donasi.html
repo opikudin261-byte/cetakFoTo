@@ -1,0 +1,108 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Donasi</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #f3f4f6; }
+    </style>
+</head>
+<body class="bg-gray-100 flex items-center justify-center min-h-screen p-0 m-0">
+
+    <div class="bg-white rounded-xl shadow-lg max-w-2xl w-full">
+        <!-- Logo di atas -->
+        <div class="w-full">
+            <img src="img/brand.png" alt="Brand Logo" class="w-full h-auto rounded-t-xl">
+        </div>
+
+        <div class="p-6 sm:p-8 text-center">
+
+            <!-- QRIS -->
+            <div class="bg-gray-50 p-6 rounded-lg mb-6 shadow-inner">
+                <h2 class="text-xl sm:text-2xl font-semibold text-gray-800 mb-4">Scan untuk Donasi atau Pembayaran</h2>
+                <div class="flex justify-center">
+                    <img src="qris.png" alt="Kode QRIS" class="max-w-full sm:max-w-md lg:max-w-lg h-auto rounded-md shadow-md">
+                </div>
+                <p class="text-sm sm:text-base text-gray-500 mt-4">Pindai kode QRIS di atas untuk berdonasi atau untuk pembayaran transaksi melalui e-wallet atau mobile banking.</p>
+            </div>
+
+            <!-- Rekening Bank & DANA -->
+            <div class="space-y-4">
+                <!-- Mandiri -->
+                <div class="bg-blue-100 p-4 rounded-lg shadow-sm flex items-center justify-between">
+                    <div class="text-left">
+                        <p class="text-lg font-bold text-blue-900">Mandiri</p>
+                        <p class="text-sm font-medium text-gray-700">1340018370204</p>
+                        <p class="text-xs text-gray-600">a/n Opikudin</p>
+                    </div>
+                    <button onclick="copyToClipboard('1340018370204', 'Mandiri')" class="bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-full transition transform hover:scale-105">
+                        Salin
+                    </button>
+                </div>
+
+                <!-- BRI -->
+                <div class="bg-green-100 p-4 rounded-lg shadow-sm flex items-center justify-between">
+                    <div class="text-left">
+                        <p class="text-lg font-bold text-green-900">BRI</p>
+                        <p class="text-sm font-medium text-gray-700">016501004505533</p>
+                        <p class="text-xs text-gray-600">a/n Opikudin</p>
+                    </div>
+                    <button onclick="copyToClipboard('016501004505533', 'BRI')" class="bg-green-600 hover:bg-green-700 text-white font-semibold py-2 px-4 rounded-full transition transform hover:scale-105">
+                        Salin
+                    </button>
+                </div>
+
+                <!-- BCA -->
+                <div class="bg-red-100 p-4 rounded-lg shadow-sm flex items-center justify-between">
+                    <div class="text-left">
+                        <p class="text-lg font-bold text-red-900">BCA</p>
+                        <p class="text-sm font-medium text-gray-700">3020636709</p>
+                        <p class="text-xs text-gray-600">a/n Muthoharoh</p>
+                    </div>
+                    <button onclick="copyToClipboard('3020636709', 'BCA')" class="bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 rounded-full transition transform hover:scale-105">
+                        Salin
+                    </button>
+                </div>
+
+                <!-- DANA -->
+                <div class="bg-purple-100 p-4 rounded-lg shadow-sm flex items-center justify-between">
+                    <div class="text-left">
+                        <p class="text-lg font-bold text-purple-900">DANA</p>
+                        <p class="text-sm font-medium text-gray-700">083824046907</p>
+                        <p class="text-xs text-gray-600">a/n Opikudin</p>
+                    </div>
+                    <button onclick="copyToClipboard('083824046907', 'DANA')" class="bg-purple-600 hover:bg-purple-700 text-white font-semibold py-2 px-4 rounded-full transition transform hover:scale-105">
+                        Salin
+                    </button>
+                </div>
+            </div>
+
+            <!-- Pesan -->
+            <div id="messageBox" class="mt-6 hidden bg-yellow-100 text-yellow-800 p-3 rounded-md transition-opacity duration-500 ease-in-out opacity-0">
+                Nomor rekening telah disalin!
+            </div>
+        </div>
+    </div>
+
+    <script>
+        function copyToClipboard(text, bankName) {
+            navigator.clipboard.writeText(text).then(() => {
+                const messageBox = document.getElementById('messageBox');
+                messageBox.textContent = `Nomor rekening ${bankName} berhasil disalin!`;
+                messageBox.classList.remove('hidden', 'opacity-0');
+                messageBox.classList.add('opacity-100');
+                setTimeout(() => {
+                    messageBox.classList.remove('opacity-100');
+                    messageBox.classList.add('opacity-0');
+                    setTimeout(() => {
+                        messageBox.classList.add('hidden');
+                    }, 500);
+                }, 3000);
+            });
+        }
+    </script>
+</body>
+</html>

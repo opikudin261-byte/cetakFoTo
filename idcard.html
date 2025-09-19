@@ -1,0 +1,1039 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Desain dan Cetak Kartu</title>
+    <!-- Memuat Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Memuat library -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+
+    <style>
+        /* Mengatur unit fisik untuk elemen cetak */
+        .paper-a4 { width: 210mm; height: 297mm; }
+        .paper-f4 { width: 210mm; height: 330mm; }
+        .paper-a5-landscape { width: 210mm; height: 148mm; }
+        .paper-a6 { width: 105mm; height: 148mm; }
+
+        .card-wrapper {
+            position: relative;
+            width: 87.6mm; /* Diperbarui dari 85.6mm */
+            height: 55.98mm; /* Diperbarui dari 53.98mm */
+            flex-shrink: 0; box-sizing: border-box;
+        }
+        
+        #paper-preview, .paper-preview {
+            transform-origin: top center;
+            transition: transform 0.3s ease-in-out;
+            margin: auto;
+            page-break-after: always; /* Pastikan setiap halaman dicetak terpisah */
+            position: relative; /* Diperlukan untuk garis bantu & tombol layar penuh */
+        }
+        
+        .paper-preview:last-child {
+            page-break-after: auto;
+        }
+
+        .card-template {
+            background-size: cover; background-position: center; background-repeat: no-repeat;
+        }
+        
+        .no-print { display: block; }
+        
+        /* Gaya untuk Garis Bantu Potong dan Ikon Gunting */
+        .cutting-guide, .scissor-icon {
+            display: none; /* Sembunyikan di layar */
+            position: absolute;
+            background-color: transparent;
+            z-index: 10;
+        }
+        .cutting-guide.vertical {
+            border-left: 1px dashed #999;
+        }
+        .cutting-guide.horizontal {
+            border-top: 1px dashed #999;
+        }
+        .scissor-icon {
+            width: 4mm;
+            height: 4mm;
+            background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23777'%3E%3Cpath d='M21.043 10.084L13.71 13.15l-1.15-1.151 7.2-3.6c.38-.19.83-.01 1.02.37s.01.83-.37 1.02v.295zM4.03 4.03c-1.302 1.302-1.302 3.414 0 4.717l5.43 5.43-5.43-5.43c-1.302-1.303-1.302-3.415 0-4.717 1.302-1.302 3.414-1.302 4.717 0l-4.717 4.717zm1.414 7.071l-2.122-2.121c-1.302-1.302-1.302-3.414 0-4.717s3.415-1.302 4.717 0l2.12 2.121-4.715 4.717zm10.153-2.193l-4.434 2.217 4.434-2.217zM12.29 14.29l-1.15-1.15-1.59 1.59c-1.302 1.302-1.302 3.414 0 4.717 1.303 1.302 3.415 1.302 4.717 0 1.302-1.303 1.302-3.415 0-4.717l-1.977-1.977z'/%3E%3C/svg%3E");
+            background-size: contain;
+            background-repeat: no-repeat;
+        }
+        
+        .grayscale-mode .card-template {
+            filter: grayscale(100%);
+        }
+
+        /* Tombol layar penuh pada preview */
+        .fullscreen-btn-preview {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            padding: 8px;
+            background-color: rgba(0, 0, 0, 0.4);
+            border-radius: 50%;
+            cursor: pointer;
+            z-index: 20;
+            transition: background-color 0.2s;
+        }
+        .fullscreen-btn-preview:hover {
+            background-color: rgba(0, 0, 0, 0.6);
+        }
+
+        /* Style kustom untuk mode cetak */
+        @media print {
+            body { margin: 0; padding: 0; }
+            .no-print { display: none !important; }
+            
+            #print-area, #print-area * { visibility: visible; }
+            #print-area { position: absolute; left: 0; top: 0; width: 100%; height: 100%; }
+            @page { margin: 0; }
+            
+            #paper-preview, .paper-preview {
+                border: none !important; box-shadow: none !important;
+                transform: scale(1) !important; margin: 0;
+            }
+            .card-template { border: none !important; background-color: transparent !important; }
+
+            .grayscale-mode .card-template {
+                filter: grayscale(100%);
+                -webkit-print-color-adjust: exact;
+                color-adjust: exact;
+            }
+
+            /* Menampilkan garis bantu & ikon gunting saat cetak */
+            .cutting-guide, .scissor-icon {
+                display: block;
+            }
+            
+            .card-wrapper::before, .card-wrapper::after { content: none; }
+        }
+        /* Spinner */
+        .spinner {
+            border: 2px solid #f3f3f3; border-top: 2px solid #3498db;
+            border-radius: 50%; width: 16px; height: 16px;
+            animation: spin 1s linear infinite;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+        
+        /* Canvas Editor */
+        #perspective-canvas {
+            cursor: grab; max-width: 100%; max-height: 100%;
+            touch-action: none; /* Mencegah scroll di ponsel */
+        }
+        
+        /* Hide number input spinners */
+        input[type='number']::-webkit-inner-spin-button,
+        input[type='number']::-webkit-outer-spin-button {
+            -webkit-appearance: none;
+            margin: 0;
+        }
+        input[type='number'] {
+            -moz-appearance: textfield;
+        }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans">
+
+    <div class="container mx-auto p-4">
+        <div class="text-center mb-6 no-print">
+            <h1 class="text-2xl md:text-3xl font-bold text-gray-800">Desain dan Cetak Kartu</h1>
+            <p class="text-gray-600 mt-1">Unggah beberapa gambar, edit, dan atur tata letak cetak multi-halaman.</p>
+        </div>
+
+        <div class="flex flex-col md:flex-row gap-6">
+            <!-- Kolom Kiri: Toolbar -->
+            <div class="w-full md:w-1/3 lg:w-1/4 no-print">
+                <div class="bg-white rounded-xl shadow-lg p-6 space-y-6 sticky top-4">
+                    <!-- Brand Image -->
+                    <div class="pb-4 border-b">
+                        <img src="/img/brand.png" alt="Brand Logo" class="w-full h-auto mx-auto" onerror="this.style.display='none'; this.parentElement.style.display='none';">
+                    </div>
+                    <!-- 1. Sumber Gambar -->
+                    <div>
+                        <h3 class="font-bold text-lg mb-2">1. Unggah Gambar</h3>
+                        <div class="flex gap-2">
+                            <label for="image-upload" class="flex-1 text-sm cursor-pointer bg-white hover:bg-gray-100 text-gray-800 font-semibold py-2 px-4 border border-gray-300 rounded-md shadow-sm text-center">
+                                Pilih File
+                            </label>
+                            <input type="file" id="image-upload" accept="image/*" class="hidden" multiple>
+                            <button id="camera-btn" class="flex-1 text-sm bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-4 rounded-md">
+                                Buka Kamera
+                            </button>
+                        </div>
+                        <div id="gallery-container" class="mt-4">
+                            <p id="gallery-placeholder" class="text-sm text-gray-500 text-center">Belum ada gambar yang diunggah.</p>
+                             <div id="image-selector-container" class="hidden">
+                                 <label for="image-selector" class="block text-sm font-medium text-gray-700 mb-1">Pilih Gambar untuk Diedit</label>
+                                 <select id="image-selector" class="w-full block p-2 border border-gray-300 rounded-md shadow-sm"></select>
+                             </div>
+                        </div>
+                    </div>
+
+                    <!-- 2. Edit Gambar Terpilih -->
+                    <div id="edit-section">
+                        <h3 class="font-bold text-lg mb-2">2. Edit Gambar Terpilih</h3>
+                        <div id="edit-controls-container" class="hidden">
+                            <img id="image-preview-thumb" src="" class="w-full h-auto border rounded bg-gray-100 mb-4">
+                            <div class="flex justify-center gap-2 mb-2">
+                                <button id="manual-crop-btn" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-2 text-sm rounded">
+                                    Potong Gambar
+                                </button>
+                            </div>
+                            <label for="print-quantity" class="block text-sm font-medium text-gray-700">Jumlah Cetak</label>
+                            <div class="flex items-center mt-1">
+                                <button id="quantity-minus-btn" type="button" class="px-3 py-1 border border-r-0 border-gray-300 rounded-l-md bg-gray-50 hover:bg-gray-100 focus:outline-none">-</button>
+                                <input type="number" id="print-quantity" value="1" min="1" class="block w-full p-2 border-t border-b border-gray-300 text-center shadow-sm focus:outline-none">
+                                <button id="quantity-plus-btn" type="button" class="px-3 py-1 border border-l-0 border-gray-300 rounded-r-md bg-gray-50 hover:bg-gray-100 focus:outline-none">+</button>
+                            </div>
+                        </div>
+                        <p id="edit-placeholder" class="text-sm text-gray-500 text-center p-4 border-2 border-dashed rounded-md">
+                            Unggah gambar untuk memulai pengeditan.
+                        </p>
+                    </div>
+
+                    <!-- 3. Pengaturan Cetak -->
+                    <div>
+                        <h3 class="font-bold text-lg mb-2">3. Pengaturan Cetak Global</h3>
+                        <label for="paper-size-selector" class="block text-sm font-medium text-gray-700 mt-4 mb-1">Ukuran Kertas</label>
+                        <select id="paper-size-selector" class="w-full block p-2 border border-gray-300 rounded-md shadow-sm">
+                            <option value="A4" selected>A4 (8 Kartu)</option>
+                            <option value="F4">F4 (10 Kartu)</option>
+                            <option value="A5">A5 Landscape (4 Kartu)</option>
+                            <option value="A6">A6 (2 Kartu)</option>
+                        </select>
+                         <label for="color-mode-selector" class="block text-sm font-medium text-gray-700 mt-4 mb-1">Mode Warna</label>
+                         <select id="color-mode-selector" class="w-full block p-2 border border-gray-300 rounded-md shadow-sm">
+                            <option value="color" selected>Warna</option>
+                            <option value="grayscale">Hitam Putih</option>
+                         </select>
+                    </div>
+
+                    <!-- 4. Aksi Final -->
+                    <div>
+                        <h3 class="font-bold text-lg mb-2">4. Hasil Akhir</h3>
+                        <div class="space-y-2">
+                             <button id="save-pdf-btn" class="w-full flex items-center justify-center gap-2 bg-green-600 hover:bg-green-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+                                Simpan PDF
+                             </button>
+                             <button onclick="window.print()" class="w-full flex items-center justify-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+                                Cetak Langsung
+                             </button>
+                             <button id="share-btn" class="w-full flex items-center justify-center gap-2 bg-gray-800 hover:bg-black text-white font-bold py-2 px-4 rounded-md transition duration-300">
+                                Bagikan
+                             </button>
+                             <button id="fullscreen-btn" class="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-2 px-4 rounded-md transition duration-300">
+                                <svg class="w-5 h-5 text-white" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M3 3a1 1 0 011-1h3a1 1 0 011 1v3a1 1 0 01-2 0V4H4a1 1 0 01-1-1zm14 0a1 1 0 01-1 1h-3a1 1 0 110-2h3a1 1 0 011 1zM3 17a1 1 0 011 1h3a1 1 0 010 2H4a1 1 0 01-1-1v-3a1 1 0 012 0v2h2a1 1 0 01-1-1zM17 17a1 1 0 01-1 1h-3a1 1 0 010-2h3a1 1 0 011 1v3a1 1 0 01-2 0z" clip-rule="evenodd"></path></svg>
+                                Layar Penuh
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Kolom Kanan: Area Preview -->
+            <div class="w-full md:w-2/3 lg:w-3/4 flex items-center justify-center no-print">
+                <div id="preview-container" class="bg-gray-200 p-4 rounded-lg overflow-y-auto min-h-[80vh] w-full flex flex-col items-center justify-center">
+                    <div id="print-area">
+                        <!-- Halaman pratinjau akan digenerate oleh JavaScript di sini -->
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+    
+    <!-- Modal untuk Editor Perspektif Kustom -->
+    <div id="perspective-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 hidden no-print z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-3xl p-4 flex flex-col">
+            <div class="mb-2">
+                <p class="text-lg font-bold">Potong Gambar</p>
+                <p class="text-sm text-gray-600 mt-1">Silakan pindahkan titik di setiap sudut untuk menyesuaikan area potong.</p>
+            </div>
+            <div class="h-[60vh] flex items-center justify-center bg-gray-200 rounded">
+                <canvas id="perspective-canvas"></canvas>
+            </div>
+            <div class="flex justify-end gap-2 mt-4">
+                <button id="cancel-perspective-btn" class="bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded">Batal</button>
+                <button id="save-perspective-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded">Simpan</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modal untuk Kamera Biasa -->
+    <div id="camera-modal" class="fixed inset-0 bg-black bg-opacity-75 flex-col items-center justify-center p-4 hidden no-print z-50">
+         <div class="bg-white rounded-lg shadow-xl w-full max-w-2xl p-4 relative">
+             <div class="relative w-full h-auto bg-black">
+                 <video id="camera-feed" class="w-full h-auto" autoplay playsinline></video>
+             </div>
+             <div class="flex justify-between items-center mt-4">
+                 <button id="switch-camera-btn" class="bg-gray-500 hover:bg-gray-600 text-white font-bold py-2 px-4 rounded">Ganti Kamera</button>
+                 <button id="capture-btn" class="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-6 rounded-lg text-lg">Ambil Gambar</button>
+                 <button id="cancel-camera-btn" class="bg-red-600 hover:bg-red-700 text-white font-bold py-2 px-4 rounded">Tutup</button>
+             </div>
+         </div>
+    </div>
+
+    <!-- Modal Pilihan Format Berbagi -->
+    <div id="share-format-modal" class="fixed inset-0 bg-black bg-opacity-75 flex items-center justify-center p-4 hidden no-print z-50">
+        <div class="bg-white rounded-lg shadow-xl w-full max-w-xs p-6 flex flex-col items-center text-center">
+            <h3 class="text-lg font-bold mb-4">Bagikan sebagai apa?</h3>
+            <div class="w-full space-y-3">
+                <button id="share-as-pdf-btn" class="w-full flex items-center justify-center gap-2 bg-purple-600 hover:bg-purple-700 text-white font-bold py-3 px-4 rounded-md">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8zM16 14a2 2 0 01-2 2h-4a2 2 0 01-2-2v-2a2 2 0 012-2h4a2 2 0 012 2v2zm-4-4v4h-2V10h2z"/></svg>
+                    PDF
+                </button>
+                <button id="share-as-jpg-btn" class="w-full flex items-center justify-center gap-2 bg-gray-600 hover:bg-gray-700 text-white font-bold py-3 px-4 rounded-md">
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24"><path d="M19 3H5a2 2 0 00-2 2v14a2 2 0 002 2h14a2 2 0 002-2V5a2 2 0 00-2-2zM5 19L14 9l2 2 3-3V5H5zm14-2V7.4l-4.5 4.5L14 13l-4-4L5 19z"/></svg>
+                    JPG
+                </button>
+                <button id="cancel-share-btn" class="w-full text-sm bg-gray-300 hover:bg-gray-400 text-gray-800 font-bold py-2 px-4 rounded-md">Batal</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        const { jsPDF } = window.jspdf;
+
+        // --- DOM Elements ---
+        const paperSelector = document.getElementById('paper-size-selector');
+        const printArea = document.getElementById('print-area');
+        const previewContainer = document.getElementById('preview-container');
+        const imageUpload = document.getElementById('image-upload');
+        const galleryPlaceholder = document.getElementById('gallery-placeholder');
+        const imageSelectorContainer = document.getElementById('image-selector-container');
+        const imageSelector = document.getElementById('image-selector');
+        const editSection = document.getElementById('edit-section');
+        const editControlsContainer = document.getElementById('edit-controls-container');
+        const editPlaceholder = document.getElementById('edit-placeholder');
+        const imagePreviewThumb = document.getElementById('image-preview-thumb');
+        const printQuantityInput = document.getElementById('print-quantity');
+        const quantityMinusBtn = document.getElementById('quantity-minus-btn');
+        const quantityPlusBtn = document.getElementById('quantity-plus-btn');
+        const colorModeSelector = document.getElementById('color-mode-selector');
+        const fullscreenBtn = document.getElementById('fullscreen-btn');
+        
+        // Edit Buttons
+        const manualCropBtn = document.getElementById('manual-crop-btn');
+
+        // Perspective Editor
+        const perspectiveModal = document.getElementById('perspective-modal');
+        const perspectiveCanvas = document.getElementById('perspective-canvas');
+        const savePerspectiveBtn = document.getElementById('save-perspective-btn');
+        const cancelPerspectiveBtn = document.getElementById('cancel-perspective-btn');
+
+        // Camera
+        const cameraBtn = document.getElementById('camera-btn');
+        const cameraModal = document.getElementById('camera-modal');
+        const cameraFeed = document.getElementById('camera-feed');
+        const captureBtn = document.getElementById('capture-btn');
+        const switchCameraBtn = document.getElementById('switch-camera-btn');
+        const cancelCameraBtn = document.getElementById('cancel-camera-btn');
+
+        // Action Buttons
+        const savePdfBtn = document.getElementById('save-pdf-btn');
+        const shareBtn = document.getElementById('share-btn');
+        
+        // New Share Modal Elements
+        const shareFormatModal = document.getElementById('share-format-modal');
+        const shareAsPdfBtn = document.getElementById('share-as-pdf-btn');
+        const shareAsJpgBtn = document.getElementById('share-as-jpg-btn');
+        const cancelShareBtn = document.getElementById('cancel-share-btn');
+
+        // --- State Variables ---
+        let cameraStream = null;
+        let uploadedImages = [];
+        let activeImageId = null;
+        let currentFacingMode = 'environment';
+        
+        const CARD_WIDTH_MM = 87.6;
+        const CARD_HEIGHT_MM = 55.98;
+        const CARD_ASPECT_RATIO = CARD_WIDTH_MM / CARD_HEIGHT_MM;
+        
+        const paperConfigs = {
+            'A4': { count: 8, paperSizeClass: 'paper-a4', dimensions: [210, 297], orientation: 'p' },
+            'F4': { count: 10, paperSizeClass: 'paper-f4', dimensions: [210, 330], orientation: 'p' },
+            'A5': { count: 4, paperSizeClass: 'paper-a5-landscape', dimensions: [210, 148], orientation: 'l' },
+            'A6': { count: 2, paperSizeClass: 'paper-a6', dimensions: [105, 148], orientation: 'p' }
+        };
+        
+        // --- Functions ---
+        
+        async function handleFileSelect(files) {
+            const imageFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
+            if (imageFiles.length === 0) return;
+
+            const fileReadPromises = imageFiles.map(file => {
+                return new Promise((resolve, reject) => {
+                    const reader = new FileReader();
+                    reader.onload = (e) => {
+                        const id = Date.now() + Math.random();
+                        const newImage = {
+                            id: id,
+                            originalSrc: e.target.result,
+                            croppedSrc: e.target.result,
+                            quantity: 1,
+                            name: file.name
+                        };
+                        resolve(newImage);
+                    };
+                    reader.onerror = reject;
+                    reader.readAsDataURL(file);
+                });
+            });
+
+            try {
+                const newImages = await Promise.all(fileReadPromises);
+                uploadedImages.push(...newImages);
+                updateImageSelector();
+                
+                if (activeImageId === null && newImages.length > 0) {
+                    setActiveImage(newImages[0].id);
+                }
+            } catch (error) {
+                console.error("Gagal membaca file:", error);
+                // Instead of alert(), use a custom modal or message box
+                showCustomMessage("Terjadi kesalahan saat membaca file gambar.");
+            } finally {
+                imageUpload.value = '';
+            }
+        }
+        
+        function updateImageSelector() {
+            imageSelector.innerHTML = '';
+            if (uploadedImages.length > 0) {
+                galleryPlaceholder.classList.add('hidden');
+                imageSelectorContainer.classList.remove('hidden');
+                
+                uploadedImages.forEach(img => {
+                    const option = document.createElement('option');
+                    option.value = img.id;
+                    option.textContent = img.name || `Gambar Kamera`;
+                    imageSelector.appendChild(option);
+                });
+
+                if (activeImageId) {
+                    imageSelector.value = activeImageId;
+                }
+            } else {
+                 galleryPlaceholder.classList.remove('hidden');
+                 imageSelectorContainer.classList.add('hidden');
+                 setActiveImage(null);
+            }
+            updateLayout();
+        }
+
+        function setActiveImage(id) {
+            activeImageId = id;
+            const activeImage = uploadedImages.find(img => img.id === id);
+
+            if (activeImage) {
+                editControlsContainer.classList.remove('hidden');
+                editPlaceholder.classList.add('hidden');
+                
+                imagePreviewThumb.src = activeImage.croppedSrc;
+                printQuantityInput.value = activeImage.quantity;
+                if (imageSelector.value != id) {
+                    imageSelector.value = id;
+                }
+            } else {
+                editControlsContainer.classList.add('hidden');
+                editPlaceholder.classList.remove('hidden');
+                activeImageId = null;
+            }
+        }
+        
+        // --- Perspective Editor Logic ---
+        const perspectiveEditor = {
+            ctx: perspectiveCanvas.getContext('2d'),
+            img: null,
+            points: [],
+            draggingPoint: null,
+            init(imageSrc) {
+                this.img = new Image();
+                this.img.onload = () => {
+                    const canvasContainer = perspectiveCanvas.parentElement;
+                    const containerRatio = canvasContainer.clientWidth / canvasContainer.clientHeight;
+                    const imgRatio = this.img.width / this.img.height;
+
+                    if (imgRatio > containerRatio) {
+                        perspectiveCanvas.width = canvasContainer.clientWidth;
+                        perspectiveCanvas.height = canvasContainer.clientWidth / imgRatio;
+                    } else {
+                        perspectiveCanvas.height = canvasContainer.clientHeight;
+                        perspectiveCanvas.width = canvasContainer.clientHeight * imgRatio;
+                    }
+
+                    this.points = [
+                        { x: 0, y: 0 },
+                        { x: perspectiveCanvas.width, y: 0 },
+                        { x: perspectiveCanvas.width, y: perspectiveCanvas.height },
+                        { x: 0, y: perspectiveCanvas.height }
+                    ];
+                    this.draw();
+                };
+                this.img.src = imageSrc;
+            },
+            draw() {
+                this.ctx.clearRect(0, 0, perspectiveCanvas.width, perspectiveCanvas.height);
+                this.ctx.drawImage(this.img, 0, 0, perspectiveCanvas.width, perspectiveCanvas.height);
+
+                this.ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+                this.ctx.lineWidth = 2;
+                this.ctx.beginPath();
+                this.ctx.moveTo(this.points[0].x, this.points[0].y);
+                for (let i = 1; i < 4; i++) {
+                    this.ctx.lineTo(this.points[i].x, this.points[i].y);
+                }
+                this.ctx.closePath();
+                this.ctx.stroke();
+
+                this.points.forEach(p => {
+                    this.ctx.fillStyle = 'rgba(255, 255, 255, 0.9)';
+                    this.ctx.strokeStyle = 'rgba(59, 130, 246, 0.9)';
+                    this.ctx.lineWidth = 2;
+                    this.ctx.beginPath();
+                    this.ctx.arc(p.x, p.y, 12, 0, 2 * Math.PI); // Titik lebih besar
+                    this.ctx.fill();
+                    this.ctx.stroke();
+                });
+            },
+            getMousePos(evt) {
+                const rect = perspectiveCanvas.getBoundingClientRect();
+                const clientX = evt.touches ? evt.touches[0].clientX : evt.clientX;
+                const clientY = evt.touches ? evt.touches[0].clientY : evt.clientY;
+                return {
+                    x: clientX - rect.left,
+                    y: clientY - rect.top
+                };
+            },
+            onMouseDown(e) {
+                const mousePos = this.getMousePos(e);
+                for (let i = 0; i < 4; i++) {
+                    const p = this.points[i];
+                    const dx = p.x - mousePos.x;
+                    const dy = p.y - mousePos.y;
+                    if (dx * dx + dy * dy < 625) { // Radius sentuh lebih besar (25px)
+                        this.draggingPoint = p;
+                        perspectiveCanvas.style.cursor = 'grabbing';
+                        return;
+                    }
+                }
+            },
+            onMouseMove(e) {
+                const mousePos = this.getMousePos(e);
+                if (this.draggingPoint) {
+                    this.draggingPoint.x = mousePos.x;
+                    this.draggingPoint.y = mousePos.y;
+                    this.draw();
+                } else {
+                    let onPoint = false;
+                     for (let i = 0; i < 4; i++) {
+                        const p = this.points[i];
+                        const dx = p.x - mousePos.x;
+                        const dy = p.y - mousePos.y;
+                        if (dx * dx + dy * dy < 625) { // Radius sentuh lebih besar
+                            onPoint = true;
+                            break;
+                        }
+                    }
+                    perspectiveCanvas.style.cursor = onPoint ? 'pointer' : 'grab';
+                }
+            },
+            onMouseUp(e) {
+                this.draggingPoint = null;
+                 perspectiveCanvas.style.cursor = 'grab';
+            },
+            applyTransform() {
+                const w = 876;  
+                const h = Math.round(w / CARD_ASPECT_RATIO);
+                
+                const from = [].concat(...this.points.map(p => [p.x * this.img.width / perspectiveCanvas.width, p.y * this.img.height / perspectiveCanvas.height]));
+                const to = [0, 0, w, 0, w, h, 0, h];
+
+                const T = this.getPerspectiveTransform(from, to);
+
+                const tempCanvas = document.createElement('canvas');
+                tempCanvas.width = w;
+                tempCanvas.height = h;
+                const tempCtx = tempCanvas.getContext('2d');
+                
+                const imageData = tempCtx.createImageData(w, h);
+                const data = imageData.data;
+                const srcData = (() => {
+                    const srcCanvas = document.createElement('canvas');
+                    srcCanvas.width = this.img.width;
+                    srcCanvas.height = this.img.height;
+                    const srcCtx = srcCanvas.getContext('2d');
+                    srcCtx.drawImage(this.img, 0, 0);
+                    return srcCtx.getImageData(0, 0, this.img.width, this.img.height).data;
+                })();
+
+                for (let y = 0; y < h; y++) {
+                    for (let x = 0; x < w; x++) {
+                        const V = this.transform(T, x, y, true);
+                        const sx = Math.floor(V[0]);
+                        const sy = Math.floor(V[1]);
+
+                        if (sx >= 0 && sx < this.img.width && sy >= 0 && sy < this.img.height) {
+                            const srcIdx = (sy * this.img.width + sx) * 4;
+                            const tgtIdx = (y * w + x) * 4;
+                            for (let i = 0; i < 4; i++) {
+                                data[tgtIdx + i] = srcData[srcIdx + i];
+                            }
+                        }
+                    }
+                }
+                tempCtx.putImageData(imageData, 0, 0);
+                return tempCanvas.toDataURL('image/jpeg');
+            },
+            transform: (T, x, y, inverse) => {
+                const M = inverse ? T.inv : T.fwd;
+                const d = M[6] * x + M[7] * y + 1;
+                return [(M[0] * x + M[1] * y + M[2]) / d, (M[3] * x + M[4] * y + M[5]) / d];
+            },
+            getPerspectiveTransform: (from, to) => {
+                const A = [];
+                for (let i = 0; i < 4; i++) {
+                    A.push([from[2 * i], from[2 * i + 1], 1, 0, 0, 0, -from[2 * i] * to[2 * i], -from[2 * i + 1] * to[2 * i]]);
+                    A.push([0, 0, 0, from[2 * i], from[2 * i + 1], 1, -from[2 * i] * to[2 * i + 1], -from[2 * i + 1] * to[2 * i + 1]]);
+                }
+                const b = [...to];
+                const h = numeric.solve(A, b);
+                const H = [[h[0], h[1], h[2]], [h[3], h[4], h[5]], [h[6], h[7], 1]];
+                const Hinv = numeric.inv(H);
+                return {fwd: H.flat(), inv: Hinv.flat()};
+            }
+        };
+
+        // Numeric.js minimal subset for matrix inversion/solving
+        const numeric = {
+            solve: (A, b) => {
+                const n = A.length, augmentation = A.map((row, i) => [...row, b[i]]);
+                for (let i = 0; i < n; i++) {
+                    let maxEl = Math.abs(augmentation[i][i]), maxRow = i;
+                    for (let k = i + 1; k < n; k++) if (Math.abs(augmentation[k][i]) > maxEl) { maxEl = Math.abs(augmentation[k][i]); maxRow = k; }
+                    [augmentation[i], augmentation[maxRow]] = [augmentation[maxRow], augmentation[i]];
+                    for (let k = i + 1; k < n; k++) {
+                        const c = -augmentation[k][i] / augmentation[i][i];
+                        for (let j = i; j < n + 1; j++) { if (i === j) augmentation[k][j] = 0; else augmentation[k][j] += c * augmentation[i][j]; }
+                    }
+                }
+                const x = Array(n).fill(0);
+                for (let i = n - 1; i > -1; i--) { x[i] = augmentation[i][n] / augmentation[i][i]; for (let k = i - 1; k > -1; k--) augmentation[k][n] -= augmentation[k][i] * x[i]; }
+                return x;
+            },
+            inv: (A) => {
+                const n = A.length, I = Array.from({length:n}, (_,i) => Array.from({length:n}, (_,j) => i===j ? 1:0)), C = A.map((r,i)=>[...r, ...I[i]]);
+                for (let i = 0; i < n; i++) {
+                    let pivot = i, maxVal = Math.abs(C[i][i]);
+                    for(let j=i+1; j<n; j++) if(Math.abs(C[j][i]) > maxVal) { maxVal = Math.abs(C[j][i]); pivot = j; }
+                    [C[i], C[pivot]] = [C[pivot], C[i]];
+                    let div = C[i][i]; for(let j=i; j<2*n; j++) C[i][j] /= div;
+                    for(let j=0; j<n; j++) if(i !== j) { let mult = C[j][i]; for(let k=i; k<2*n; k++) C[j][k] -= mult*C[i][k]; }
+                }
+                return C.map(r => r.slice(n));
+            }
+        };
+        // -----------------------------
+        
+        function addCuttingGuidesToPage(page, pageConfig, cardsOnThisPage, layout) {
+            const { sidePadding, horizontalGap, topPadding, verticalGap, cardsPerRow } = layout;
+            
+            const rowsOnThisPage = Math.ceil(cardsOnThisPage / cardsPerRow);
+
+            if (cardsPerRow > 1) {
+                for (let i = 1; i < cardsPerRow; i++) {
+                    const x = sidePadding + (i * CARD_WIDTH_MM) + (i * horizontalGap) - (horizontalGap / 2);
+                    
+                    const line = document.createElement('div');
+                    line.className = 'cutting-guide vertical';
+                    line.style.left = `${x}mm`; line.style.top = `${topPadding}mm`;
+                    line.style.height = `${rowsOnThisPage * CARD_HEIGHT_MM + (rowsOnThisPage -1) * verticalGap}mm`;
+                    page.appendChild(line);
+
+                    const scissor = document.createElement('div');
+                    scissor.className = 'scissor-icon';
+                    scissor.style.left = `${x - 2}mm`; scissor.style.top = `${topPadding - 5}mm`;
+                    page.appendChild(scissor);
+                }
+            }
+            if (rowsOnThisPage > 1) {
+                for (let i = 1; i < rowsOnThisPage; i++) {
+                    const y = topPadding + (i * CARD_HEIGHT_MM) + (i * verticalGap) - (verticalGap / 2);
+
+                    const line = document.createElement('div');
+                    line.className = 'cutting-guide horizontal';
+                    line.style.top = `${y}mm`; line.style.left = `${sidePadding}mm`;
+                    line.style.width = `${cardsPerRow * CARD_WIDTH_MM + (cardsPerRow -1) * horizontalGap}mm`;
+                    page.appendChild(line);
+
+                    const scissor = document.createElement('div');
+                    scissor.className = 'scissor-icon';
+                    scissor.style.left = `${sidePadding - 5}mm`; scissor.style.top = `${y - 2}mm`;
+                    page.appendChild(scissor);
+                }
+            }
+        }
+
+        function updateLayout() {
+            printArea.innerHTML = '';
+            const paperSize = paperSelector.value;
+            const config = paperConfigs[paperSize];
+            const paperWidth = config.dimensions[0];
+            const paperHeight = config.dimensions[1];
+            
+            const cardsPerRow = Math.floor(paperWidth / CARD_WIDTH_MM) || 1;
+            const rowsOnPage = Math.ceil(config.count / cardsPerRow);
+
+            let sidePadding = (paperWidth - (cardsPerRow * CARD_WIDTH_MM)) / (2 * cardsPerRow);
+            let horizontalGap = sidePadding * 2;
+            let topPadding = (paperHeight - (rowsOnPage * CARD_HEIGHT_MM)) / (2 * rowsOnPage);
+            let verticalGap = topPadding * 2;
+
+            if (sidePadding < 0) { sidePadding = 0; horizontalGap = 0; }
+            if (topPadding < 0) { 
+                topPadding = 2;
+                verticalGap = (paperHeight - (rowsOnPage * CARD_HEIGHT_MM) - (2 * topPadding)) / (rowsOnPage > 1 ? rowsOnPage - 1 : 1);
+                if (verticalGap < 0) verticalGap = 0;
+            }
+            
+            const layoutConfig = { sidePadding, horizontalGap, topPadding, verticalGap, cardsPerRow };
+
+            let cardsToPrint = [];
+            uploadedImages.forEach(img => {
+                for(let i = 0; i < img.quantity; i++) {
+                    cardsToPrint.push(img.croppedSrc);
+                }
+            });
+
+            const isPlaceholder = cardsToPrint.length === 0;
+            const totalCardsToRender = isPlaceholder ? config.count : cardsToPrint.length;
+
+            if (totalCardsToRender === 0) {
+                 setTimeout(fitPreviewToScreen, 50);
+                 return;
+            }
+
+            let currentPage = null, currentCardContainer = null, cardsOnCurrentPage = 0;
+            for(let index = 0; index < totalCardsToRender; index++) {
+                if (index % config.count === 0) {
+                    if(currentPage) {
+                        addCuttingGuidesToPage(currentPage, config, cardsOnCurrentPage, layoutConfig);
+                    }
+                    cardsOnCurrentPage = 0;
+                    currentPage = document.createElement('div');
+                    currentPage.className = `paper-preview bg-white shadow-lg mb-4 ${config.paperSizeClass}`;
+                    currentPage.style.flexShrink = '0'; // Ensure pages don't shrink on larger screens
+                    
+                    currentCardContainer = document.createElement('div');
+                    currentCardContainer.style.padding = `${topPadding}mm ${sidePadding}mm`;
+                    currentCardContainer.style.gap = `${verticalGap}mm ${horizontalGap}mm`;
+                    currentCardContainer.className = "flex flex-wrap justify-start items-start content-start box-border w-full h-full";
+                    currentPage.appendChild(currentCardContainer);
+                    printArea.appendChild(currentPage);
+                }
+                const wrapper = document.createElement('div');
+                wrapper.className = 'card-wrapper';
+                const card = document.createElement('div');
+                card.className = 'card-template w-full h-full rounded-md';
+                if(!isPlaceholder) {
+                    card.style.backgroundImage = `url(${cardsToPrint[index]})`;
+                } else {
+                    card.classList.add('border', 'border-dashed', 'border-gray-400');
+                }
+                wrapper.appendChild(card);
+                currentCardContainer.appendChild(wrapper);
+                cardsOnCurrentPage++;
+            }
+            if (currentPage) {
+                addCuttingGuidesToPage(currentPage, config, cardsOnCurrentPage, layoutConfig);
+            }
+            setTimeout(fitPreviewToScreen, 50);
+        }
+        
+        function fitPreviewToScreen() {
+            const pages = document.querySelectorAll('.paper-preview');
+            pages.forEach(page => {
+                 page.style.transform = 'scale(1)';
+                 const containerWidth = previewContainer.clientWidth - 40;
+                 const paperWidth = page.offsetWidth;
+                 if (paperWidth > containerWidth) {
+                     const scale = containerWidth / paperWidth;
+                     page.style.transform = `scale(${scale})`;
+                 }
+            });
+        }
+        
+        // Custom Message Box Function
+        function showCustomMessage(message, duration = 3000) {
+            const messageBox = document.createElement('div');
+            messageBox.className = "fixed bottom-5 left-1/2 -translate-x-1/2 bg-gray-800 text-white p-4 rounded-lg shadow-xl z-50 transition-transform duration-300 transform-gpu";
+            messageBox.textContent = message;
+            document.body.appendChild(messageBox);
+            setTimeout(() => {
+                messageBox.classList.add('scale-0');
+                setTimeout(() => messageBox.remove(), 300);
+            }, duration);
+        }
+
+        // --- Simple Camera Logic ---
+        
+        async function startCamera() {
+            if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); }
+
+            try {
+                const constraints = { video: { facingMode: { ideal: currentFacingMode } } };
+                cameraStream = await navigator.mediaDevices.getUserMedia(constraints);
+                cameraFeed.srcObject = cameraStream;
+            } catch (err) {
+                console.error("Gagal memulai kamera:", err);
+                showCustomMessage("Gagal mengakses kamera. Pastikan izin telah diberikan.");
+                closeCamera();
+            }
+        }
+
+        function closeCamera() {
+            if (cameraStream) { cameraStream.getTracks().forEach(track => track.stop()); }
+            cameraStream = null;
+            cameraModal.style.display = 'none';
+        }
+
+        // --- Event Listeners ---
+        imageUpload.addEventListener('change', (event) => handleFileSelect(event.target.files));
+        
+        imageSelector.addEventListener('change', (e) => setActiveImage(parseFloat(e.target.value)));
+
+        manualCropBtn.addEventListener('click', () => {
+            const activeImage = uploadedImages.find(img => img.id === activeImageId);
+            if (activeImage) {
+                perspectiveModal.classList.remove('hidden');
+                perspectiveEditor.init(activeImage.originalSrc);
+            }
+        });
+        
+        savePerspectiveBtn.addEventListener('click', () => {
+            const activeImage = uploadedImages.find(img => img.id === activeImageId);
+            if (activeImage) {
+                activeImage.croppedSrc = perspectiveEditor.applyTransform();
+                setActiveImage(activeImage.id);
+                updateLayout();
+            }
+            perspectiveModal.classList.add('hidden');
+        });
+
+        cancelPerspectiveBtn.addEventListener('click', () => perspectiveModal.classList.add('hidden'));
+
+        perspectiveCanvas.addEventListener('mousedown', (e) => perspectiveEditor.onMouseDown(e));
+        perspectiveCanvas.addEventListener('mousemove', (e) => perspectiveEditor.onMouseMove(e));
+        perspectiveCanvas.addEventListener('mouseup', (e) => perspectiveEditor.onMouseUp(e));
+        perspectiveCanvas.addEventListener('mouseleave', (e) => perspectiveEditor.onMouseUp(e));
+        perspectiveCanvas.addEventListener('touchstart', (e) => { e.preventDefault(); perspectiveEditor.onMouseDown(e); }, { passive: false });
+        perspectiveCanvas.addEventListener('touchmove', (e) => { e.preventDefault(); perspectiveEditor.onMouseMove(e); }, { passive: false });
+        perspectiveCanvas.addEventListener('touchend', (e) => perspectiveEditor.onMouseUp(e));
+        
+        printQuantityInput.addEventListener('input', (e) => {
+            const activeImage = uploadedImages.find(img => img.id === activeImageId);
+            if(activeImage) {
+                activeImage.quantity = Math.max(1, parseInt(e.target.value, 10) || 1);
+                updateLayout();
+            }
+        });
+
+        quantityMinusBtn.addEventListener('click', () => {
+            let currentValue = parseInt(printQuantityInput.value, 10);
+            if (currentValue > 1) {
+                printQuantityInput.value = currentValue - 1;
+                printQuantityInput.dispatchEvent(new Event('input'));
+            }
+        });
+
+        quantityPlusBtn.addEventListener('click', () => {
+            let currentValue = parseInt(printQuantityInput.value, 10);
+            printQuantityInput.value = currentValue + 1;
+            printQuantityInput.dispatchEvent(new Event('input'));
+        });
+        
+        colorModeSelector.addEventListener('change', (e) => {
+            if (e.target.value === 'grayscale') {
+                printArea.classList.add('grayscale-mode');
+            } else {
+                printArea.classList.remove('grayscale-mode');
+            }
+        });
+        
+        paperSelector.addEventListener('change', updateLayout);
+        cameraBtn.addEventListener('click', () => {
+            cameraModal.style.display = 'flex';
+            startCamera();
+        });
+        cancelCameraBtn.addEventListener('click', closeCamera);
+        switchCameraBtn.addEventListener('click', () => {
+            currentFacingMode = currentFacingMode === 'environment' ? 'user' : 'environment';
+            startCamera();
+        });
+        captureBtn.addEventListener('click', () => {
+             if (!cameraStream) return;
+            const canvas = document.createElement('canvas');
+            canvas.width = cameraFeed.videoWidth;
+            canvas.height = cameraFeed.videoHeight;
+            const ctx = canvas.getContext('2d');
+            ctx.drawImage(cameraFeed, 0, 0, canvas.width, canvas.height);
+            
+            canvas.toBlob(blob => {
+                const file = new File([blob], `Kamera ${new Date().toLocaleTimeString()}.jpg`, { type: "image/jpeg" });
+                handleFileSelect([file]);
+            }, 'image/jpeg');
+
+            closeCamera();
+        });
+
+        savePdfBtn.addEventListener('click', async () => {
+            setButtonLoading(savePdfBtn, true);
+            await generatePDF('save');
+            setButtonLoading(savePdfBtn, false);
+        });
+
+        // New Logic for Share Button
+        shareBtn.addEventListener('click', () => {
+            if (uploadedImages.length === 0) {
+                showCustomMessage("Tidak ada gambar untuk dibagikan.");
+                return;
+            }
+            if (!navigator.share) {
+                showCustomMessage('Fitur bagikan tidak didukung di browser Anda.');
+                return;
+            }
+            shareFormatModal.classList.remove('hidden');
+        });
+
+        shareAsPdfBtn.addEventListener('click', async () => {
+            setButtonLoading(shareAsPdfBtn, true);
+            shareFormatModal.classList.add('hidden');
+            try {
+                const blob = await generatePDF('blob');
+                if (!blob) return;
+                const file = new File([blob], `kartu-${paperSelector.value}.pdf`, { type: 'application/pdf' });
+                await navigator.share({
+                    title: 'Desain Kartu',
+                    text: 'Ini adalah desain kartu yang dibuat.',
+                    files: [file]
+                });
+            } catch (error) {
+                console.error('Gagal membagikan PDF:', error);
+                // Fallback: If share fails, prompt download instead
+                showCustomMessage('Gagal membagikan file PDF. Mencoba mengunduh...', 5000);
+                const file = new File([blob], `kartu-${paperSelector.value}.pdf`, { type: 'application/pdf' });
+                const url = URL.createObjectURL(file);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `kartu-${paperSelector.value}.pdf`;
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(url);
+            } finally {
+                setButtonLoading(shareAsPdfBtn, false);
+            }
+        });
+
+        shareAsJpgBtn.addEventListener('click', async () => {
+            setButtonLoading(shareAsJpgBtn, true);
+            shareFormatModal.classList.add('hidden');
+            try {
+                const files = await generateJPGs();
+                if (files.length === 0) return;
+                await navigator.share({
+                    title: 'Desain Kartu',
+                    text: 'Ini adalah desain kartu yang dibuat.',
+                    files: files
+                });
+            } catch (error) {
+                console.error('Gagal membagikan JPG:', error);
+                showCustomMessage('Gagal membagikan file JPG.');
+            } finally {
+                setButtonLoading(shareAsJpgBtn, false);
+            }
+        });
+
+        cancelShareBtn.addEventListener('click', () => {
+            shareFormatModal.classList.add('hidden');
+        });
+        
+        fullscreenBtn.addEventListener('click', () => {
+            if (!document.fullscreenElement) {
+                previewContainer.requestFullscreen().catch(err => {
+                    showCustomMessage(`Gagal mengaktifkan mode layar penuh: ${err.message}`);
+                });
+            } else {
+                document.exitFullscreen();
+            }
+        });
+        
+        function setButtonLoading(button, isLoading) {
+            if (isLoading) {
+                button.disabled = true;
+                button.dataset.originalText = button.innerHTML;
+                button.innerHTML = '<div class="spinner"></div><span>Memproses...</span>';
+            } else {
+                button.disabled = false;
+                button.innerHTML = button.dataset.originalText;
+            }
+        }
+
+        async function generatePDF(outputType = 'save') {
+            const pages = document.querySelectorAll('.paper-preview');
+            if (pages.length === 0) { showCustomMessage("Tidak ada gambar untuk disimpan ke PDF."); return; }
+            const paperSize = paperSelector.value;
+            const config = paperConfigs[paperSize];
+            const pdf = new jsPDF({ orientation: config.orientation, unit: 'mm', format: config.dimensions });
+            
+            // Tambahkan jeda singkat untuk memastikan semua elemen DOM selesai dirender.
+            await new Promise(resolve => setTimeout(resolve, 50));
+
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i];
+                const originalScale = page.style.transform;
+                page.style.transform = 'scale(1)';
+                
+                const canvas = await html2canvas(page, { scale: 3, useCORS: true });
+                
+                page.style.transform = originalScale;
+                const imgData = canvas.toDataURL('image/png');
+                if (i > 0) pdf.addPage(config.dimensions, config.orientation);
+                pdf.addImage(imgData, 'PNG', 0, 0, config.dimensions[0], config.dimensions[1]);
+            }
+
+            if (outputType === 'save') pdf.save(`kartu-${paperSize}.pdf`);
+            else if (outputType === 'blob') return pdf.output('blob');
+        }
+
+        async function generateJPGs() {
+            const pages = document.querySelectorAll('.paper-preview');
+            if (pages.length === 0) {
+                showCustomMessage("Tidak ada gambar untuk dibagikan.");
+                return [];
+            }
+            const files = [];
+            for (let i = 0; i < pages.length; i++) {
+                const page = pages[i];
+                const originalScale = page.style.transform;
+                page.style.transform = 'scale(1)';
+                const canvas = await html2canvas(page, { scale: 3, useCORS: true });
+                page.style.transform = originalScale;
+                const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/jpeg'));
+                files.push(new File([blob], `kartu_halaman_${i + 1}.jpg`, { type: 'image/jpeg' }));
+            }
+            return files;
+        }
+
+        window.addEventListener('load', () => {
+            updateLayout();
+            setActiveImage(null);
+        });
+        window.addEventListener('resize', fitPreviewToScreen);
+    </script>
+</body>
+</html>
